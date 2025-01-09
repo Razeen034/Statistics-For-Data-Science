@@ -1,5 +1,8 @@
 
+
 # Systolic Blood Pressure Analysis
+# Author
+**Rajin Panthee**
 
 ## Overview
 This project analyzes data from the Jackson Heart Study (JHS) to investigate factors influencing systolic blood pressure (SBP). The analysis involves modeling SBP as a function of age, education, and body mass index (BMI), assessing model assumptions, and visualizing the results.
@@ -119,5 +122,3 @@ This project analyzes data from the Jackson Heart Study (JHS) to investigate fac
 2. Place the data file (`analysis1.sas7bdat`) in the specified directory.
 3. Run the code chunks in the `sbp_analysis.qmd` file to reproduce the analysis.
 
-## Author
-**Rajin Panthee**
