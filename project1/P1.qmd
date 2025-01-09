@@ -1,0 +1,204 @@
+---
+title: "Systolic Blood Pressure Analysis"
+author: "Rajin Panthee"
+format: 
+  html:
+    self-contained: true
+    echo: true
+    message: false
+    warning: false
+    error: true 
+editor: source
+---
+
+**In this project, we analyze data from the Jackson Heart Study (JHS) to investigate the factors influencing systolic blood pressure (SBP).**
+
+**0. Import the JHS data.**
+
+```{r import}
+# Load the haven package to work with SAS data files
+library(haven)
+# Read the JHS data from the specified file path
+jhs_data <- read_sas("C:\\Users\\rajpa\\Downloads\\analysis1.sas7bdat")
+```
+
+**1a. Model systolic blood pressure (*sbp*; mmHg) as a function of age (*age*; years), education (*HSgrad*; 0=no, 1=yes), and body mass index (*BMI*; kg/m<sup>2</sup>).**
+
+```{r m1}
+# Fit a generalized linear model with sbp as the dependent variable
+# Predictors include age, HSgrad, and BMI
+m1 <- glm(sbp ~ age + HSgrad + BMI, data = jhs_data, family = gaussian)
+# Display a summary of the model
+summary(m1)
+```
+
+\begin{align*}
+\hat{y} &= 95.04 + 0.44 \times \text{age} - 0.84 \times \text{HSgrad} + 0.24 \times \text{BMI}
+\end{align*}
+
+**1b. Construct the 95% confidence intervals for the regression coefficients.**
+
+```{r ci}
+# Calculate and display 95% confidence intervals for the model coefficients
+confint(m1)
+```
+
+**1c. Test if the regression line is significant at the \(\alpha=0.05\) level.**
+
+```{r srl}
+# Load the dplyr package for data manipulation
+library(dplyr)
+# Select relevant columns and remove rows with missing values
+data_new <- jhs_data %>%
+  select(age, HSgrad, BMI, sbp) %>%
+  na.omit()
+
+# Compare the full model with the null model using an ANOVA test
+suppressPackageStartupMessages({
+  full <- glm(sbp ~ age + HSgrad + BMI, data = data_new, family = gaussian)
+  reduced <- glm(sbp ~ 1, data = data_new, family = gaussian)
+  anova(reduced, full, test = "F")
+})
+```
+
+**1d. Identify significant predictors of systolic blood pressure.**
+
+```{r}
+# Display a summary of the model to identify significant predictors
+summary(m1)
+```
+
+**1e. Interpret the slopes of the predictors.**
+
+The intercept represents the baseline systolic blood pressure when all predictors are zero. Age and BMI have positive coefficients, indicating an increase in SBP with higher age and BMI, while HSgrad has a negative but not statistically significant coefficient.
+
+**1f. Visualize the model results.**
+
+```{r}
+# Load necessary packages for visualization
+library(dplyr)
+library(ggplot2)
+
+# Extract coefficients from the model and calculate predicted SBP values for different ages
+c1 <- coefficients(m1)
+data_new <- jhs_data %>%
+  select(age, HSgrad, BMI, sbp) %>%
+  na.omit()
+
+dataset <- data_new %>%
+  mutate(sbp_hat_age30 = c1["(Intercept)"] + c1["age"]*30 + c1["HSgrad"]*mean(HSgrad) + c1["BMI"]*mean(BMI),
+         sbp_hat_age40 = c1["(Intercept)"] + c1["age"]*40 + c1["HSgrad"]*mean(HSgrad) + c1["BMI"]*mean(BMI),
+         sbp_hat_age50 = c1["(Intercept)"] + c1["age"]*50 + c1["HSgrad"]*mean(HSgrad) + c1["BMI"]*mean(BMI))
+
+# Create a scatter plot of age vs SBP and overlay predicted lines for different ages
+dataset %>% 
+  ggplot(aes(x = age)) +
+  geom_point(aes(y = sbp)) +
+  geom_line(aes(y = sbp_hat_age30), color = "blue") +
+  geom_line(aes(y = sbp_hat_age40), color = "purple") +
+  geom_line(aes(y = sbp_hat_age50), color = "green") +
+  theme_bw()
+```
+
+**1g. Identify suspected outliers.**
+
+```{r}
+# Add a column to indicate suspected outliers based on standardized residuals
+dataset <- data_new %>%
+  mutate(outlier =  if_else(abs(rstandard(m1)) > 2.5, "Suspected", "Not Suspected"))
+# Count the number of suspected outliers
+outlier_count <- dataset %>% count(outlier)
+print(outlier_count)
+```
+
+**1h. Identify influential/leverage points.**
+
+```{r}
+# Use the cooks function from the classpackage to identify influential points
+library(classpackage)
+cooks(m1)
+```
+
+**1i. Assess multicollinearity in the model.**
+
+```{r}
+# Use the vif function from the car package to check for multicollinearity
+car::vif(m1)
+```
+
+**2a. Model systolic blood pressure as a function of age, education, and health status (BMI categorized into three levels: poor, intermediate, ideal health).**
+
+```{r}
+# Load required packages
+library(dplyr)
+library(fastDummies)
+
+# Select relevant columns and remove rows with missing values
+jhs_data <-  jhs_data %>%
+  select(age, HSgrad, BMI3cat, sbp) %>%
+  na.omit()
+
+# Create a new variable for health status based on BMI categories and generate dummy variables
+jhs_data <-  jhs_data %>%
+  mutate(health = case_when(BMI3cat == 0 ~ "poor_health",
+                            BMI3cat == 1 ~ "intermediate_health",
+                            BMI3cat == 2 ~ "ideal_health")) %>%
+  dummy_cols(select_columns = c("health"))
+
+# Display the first few rows of the modified dataset
+head(jhs_data)
+
+# Fit a generalized linear model with sbp as the dependent variable and health as a predictor
+m2 <- glm(sbp ~ age + HSgrad + health , data = jhs_data, family = gaussian)
+
+# Display a summary of the model
+summary(m2)
+```
+
+\begin{align*}
+\hat{y} &= 101.22 + 0.44 \times \text{age} - 0.92 \times \text{HSgrad} \\
+&\quad + 0.96 \times \text{intermediate health} + 3.14 \times \text{poor health}
+\end{align*}
+
+**2b. Construct the 95% confidence intervals for the regression coefficients.**
+
+```{r}
+# Calculate and display 95% confidence intervals for the model coefficients
+confint(m2)
+```
+
+**2c. Identify significant predictors at \(\alpha=0.05\) level.**
+
+```{r}
+# Display a summary of the model to identify significant predictors
+summary(m2)
+```
+
+**2d. Interpret the slopes of the predictors.**
+
+The coefficients represent the impact of each predictor on SBP, with age being a significant predictor, while education and intermediate health are not. Poor health is associated with significantly higher SBP compared to ideal health.
+
+**2e. Visualize the model results.**
+
+```{r}
+# Calculate predicted SBP values for different health categories and ages
+dataset <- jhs_data %>%
+  mutate(
+    sbp_hat_age30 = 101.21996 + 0.43573 * 30 - 0.91572 * HSgrad + 0.96442 * health_intermediate_health + 3.13837 * health_poor_health,
+    sbp_hat_age40 = 101.21996 + 0.43573 * 40 - 0.91572 * HSgrad + 0.96442 * health_intermediate_health + 3.13837 * health_poor_health,
+     sbp_hat_age50 = 101.21996 + 0.43573 * 50 - 0.91572 * HSgrad + 0.96442 * health_intermediate_health + 3.13837 * health_poor_health
+  )
+
+# Create a scatter plot of age vs SBP, adding smooth lines for predicted values for each age group
+dataset %>%
+  ggplot(aes(x = age)) +
+  geom_point(aes(y = sbp)) +  # Scatter plot for actual SBP values
+  geom_line(aes(y = sbp_hat_age30), color = "blue") +  # Line for predicted SBP at age 30
+  geom_line(aes(y = sbp_hat_age40), color = "purple") +  # Line for predicted SBP at age 40
+  geom_line(aes(y = sbp_hat_age50), color = "green") +  # Line for predicted SBP at age 50
+  theme_minimal() +
+  labs(title = "Systolic Blood Pressure by Age and Health Status",
+       x = "Age",
+       y = "Systolic Blood Pressure",
+       color = "Predicted SBP")
+```
